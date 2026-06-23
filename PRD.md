@@ -302,3 +302,89 @@ interface ExtensionSettings {
 2. fast.com の自動テスト開始は可能か？→ 要検証（UI操作の自動化）
 3. 無料枠で十分か？→ Gemini 1500req/day なら個人利用は十分
 4. 複数ブラウザ対応が必要か？→ Chrome のみで開始、Edge対応はPhase 3
+
+---
+
+## 11. テスト戦略
+
+### 11.1 使用ツール
+
+| ツール | 用途 | 備考 |
+|---|---|---|
+| **DevTools (Chrome)** | 拡張機能のデバッグ、Console確認、Network監視 | 開発中のメイン |
+| **Edge (msedge)** | Edgeブラウザでの互換性テスト | Edge版として動作確認 |
+| **Playwright** | E2Eテスト自動化 | headless + devtool protocol |
+| **Vitest** | ユニットテスト | 各モジュールの単体検証 |
+| **Chrome DevTools Protocol (CDP)** | スクリーンショット自動取得の検証 | content script のテスト |
+
+### 11.2 テストレベル
+
+| レベル | 内容 | ツール |
+|---|---|---|
+| Unit | screenshot.ts, geolocation.ts, ai.ts, maps.ts | Vitest |
+| Integration | スクショ→AI生成→Maps投稿のフロー統合 | Vitest + Playwright |
+| E2E | 拡張機能のインストール→実行→投稿完了まで | Playwright + CDP |
+| Cross-browser | Edgeでの動作確認 | Playwright (Chromium/Edge) |
+
+### 11.3 テスト環境
+
+- Chrome: 開発用（拡張機能を `chrome://extensions` からアンパックドロード）
+- Edge: 互換性検証（`edge://extensions` から同様ロード）
+- CI: GitHub Actions の ubuntu-latest + Playwright (headless)
+
+---
+
+## 12. CI/CD パイプライン (GitHub Actions)
+
+### 12.1 Workflow 構成
+
+| Workflow | トリガー | 処理 |
+|---|---|---|
+| `ci.yml` | push / PR | lint → typecheck → unit test → build |
+| `e2e.yml` | PR / main merge | Playwright E2E テスト (headless) |
+| `release.yml` | tag push (`v*`) | build → zip → GitHub Release 作成 |
+| `edge-test.yml` | PR (手動) | Edge (msedge) での E2E テスト |
+
+### 12.2 リリースフロー
+
+```
+[開発] → [PR] → [CI: lint+test+build]
+                            ↓
+                    [main merge]
+                            ↓
+                    [E2E テスト]
+                            ↓
+                    [git tag v0.1.0]
+                            ↓
+                    [release.yml 発火]
+                            ↓
+                    [GitHub Release 作成]
+                    (fastmap-v0.1.0.zip)
+```
+
+### 12.3 デプロイターゲット
+
+| ターゲット | 方法 | タイミング |
+|---|---|---|
+| GitHub Release | `gh release create` | tag push時 |
+| Chrome Web Store | 手動アップロード（将来） | 安定版リリース時 |
+| Edge Add-ons | 手動アップロード（将来） | 安定版リリース時 |
+
+---
+
+## 13. セキュリティ
+
+### API Key 管理
+- 拡張機能内にAPI Keyを直接埋め込まない
+- サーバーサイドプロキシ（`server/`）経由でAPI呼び出し
+- GitHub Secrets でCI/CDのキーを管理
+
+### Content Security Policy
+- Manifest V3 の CSP に準拠
+- `connect-src` に必要なAPI エンドポイントのみ許可
+- `unsafe-eval` は使用しない
+
+### ユーザーデータ
+- 位置情報はローカルのみ（`chrome.storage.local`）
+- 外部サーバーへの送信は最小限（AI API のみ）
+- スクリーンショットはローカル保存のみ

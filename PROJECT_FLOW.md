@@ -177,8 +177,85 @@ fastmap/
 
 ---
 
-## 6. 次のアクション
+## 6. テスト & CI/CD 設計
+
+### テストツール
+
+| ツール | 用途 | 詳細 |
+|---|---|---|
+| **DevTools** | 開発中のデバッグ | chrome://extensions からアンパックドロード + Console |
+| **Edge (msedge)** | 互換性確認 | edge://extensions で同様テスト |
+| **Playwright** | E2E自動化 | headless + CDP で拡張機能のフローテスト |
+| **Vitest** | ユニットテスト | 各moduleの単体検証 |
+
+### GitHub Actions Workflows
+
+```yaml
+# .github/workflows/ci.yml
+on: [push, pull_request]
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+# .github/workflows/release.yml
+on:
+  push:
+    tags: ['v*']
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: gh release create ${{ github.ref_name }}
+        dist/fastmap-${{ github.ref_name }}.zip
+        --title ${{ github.ref_name }}
+        --notes CHANGELOG.md
+```
+
+### テスト環境構築手順
+
+1. **Chrome (DevTools)**
+   ```
+   chrome://extensions → デベロッパーモード ON
+   → パッケージ化された拡張機能を読み込み
+   → fast.com を開いてテスト実行
+   → Console出力を確認
+   ```
+
+2. **Edge (msedge)**
+   ```
+   edge://extensions → デベロッパーモード ON
+   → 同じ拡張機能を読み込み
+   → 同等のフローを確認
+   ```
+
+3. **Playwright E2E (CI)**
+   ```
+   npm run test:e2e
+   → headless Chromium で拡張機能を起動
+   → fast.com を自動操作
+   → スクショ→AI生成→Maps投稿のフローを自動検証
+   ```
+
+### マイルストーン（テスト含む）
+
+| マイルストーン | 成果物 | 判定基準 |
+|---|---|---|
+| M8: E2Eテスト | Playwright CI | green |
+| M9: Edge確認 | msedge での動作 | 手動確認 |
+| M10: v0.1.0 Release | GitHub Release | tag → zip → notes |
+
+## 7. 次のアクション
 
 1. **fast.com DOM調査** — ブラウザで開いて構造確認
 2. **Google Maps API 調査** — ドキュメント確認
 3. **拡張機能骨格作成** — Manifest V3 + TS プロジェクト初期化
+4. **GitHub Actions CI** — lint/test/build パイプライン構築
+5. **Playwright導入** — E2Eテスト環境構築
